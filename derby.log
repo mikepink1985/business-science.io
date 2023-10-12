@@ -1,0 +1,13 @@
+----------------------------------------------------------------
+Thu Oct 07 14:48:03 EDT 2021:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.12.1.1 - (1704137): instance a816c00e-017c-5c15-7846-000005b01738 
+on database directory memory:/Users/mdancho/Desktop/learning_labs/lab_65_sparklyr/databaseName=metastore_db with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@55054057 
+Loaded from file:/Users/mdancho/spark/spark-3.1.1-bin-hadoop3.2/jars/derby-10.12.1.1.jar
+java.vendor=Oracle Corporation
+java.runtime.version=13.0.2+8
+user.dir=/Users/mdancho/Desktop/learning_labs/lab_65_sparklyr
+os.name=Mac OS X
+os.arch=x86_64
+os.version=10.16
+derby.system.home=null
+Database Class Loader started - derby.database.classpath=''

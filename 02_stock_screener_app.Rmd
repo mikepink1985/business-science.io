@@ -1,0 +1,281 @@
+---
+title: "Stock Screener"
+output:
+    flexdashboard::flex_dashboard:
+        orientation: columns
+        theme: 
+          bootswatch: "lux"
+          bg: "white"
+          fg: "white"
+          primary: "#18bc9c"
+          secondary: "#18bc9c"
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo    = FALSE,
+    message = FALSE,
+    warning = FALSE
+)
+
+library(shiny)
+library(shinyjs)
+library(plotly)
+# library(bslib)
+library(tidyverse)
+library(timetk)
+library(janitor)
+
+```
+
+``` {css}
+.chart-title {
+  background-color: black;
+  color: white;
+}
+
+.chart-stage {
+  background-color: black;
+}
+
+.section.sidebar {
+  background-color: black;
+}
+
+.navbar.navbar-inverse {
+  background-color: #18bc9c!important;
+  box-shadow: 3px 3px 5px black;
+}
+
+.navbar-dark .navbar-brand, .navbar.navbar-inverse .navbar-brand {
+  color:black;
+}
+
+.navbar.navbar-inverse ul.nav.navbar-nav>li.active>a {
+  color:black;
+}
+
+.dashboard-column {
+  background-color: black;
+}
+
+.section {
+  background-color: black;
+}
+
+body {
+  background-color:black;
+}
+
+```
+
+```{r}
+
+nasdaq_data_tbl    <- read_rds("raw_data/nasdaq_data_tbl.rds")
+nasdaq_metrics_tbl <- read_rds("processed_data/nasdaq_metrics.rds")
+nasdaq_index_tbl   <- read_rds("raw_data/nasdaq_index.rds") %>%
+    clean_names()
+
+```
+
+
+
+# NASDAQ 4500+ Stock Investment
+
+## Column {.sidebar}
+
+<br>
+
+__Learning Lab 65: Spark in R.__
+
+
+#### What does the app do?
+
+> Screens 4500 Stocks from the NASDAQ Exchange. 
+
+<hr>
+
+#### Filters
+
+__Use filters__ to identify stocks for potential investment.
+
+```{r}
+useShinyjs(rmd = TRUE)
+
+shiny::sliderInput(
+    inputId = "market_cap", 
+    label   = "Market Cap ($ Billions)", 
+    min     = 0.5,
+    value   = 1,
+    max     = 100, 
+    step    = 2
+)
+
+shiny::sliderInput(
+    inputId = "max_sd", 
+    label   = "Maximum Standard Deviation", 
+    min     = 0.25,
+    value   = 1,
+    max     = 5, 
+    step    = .25
+)
+    
+
+    
+actionButton(inputId = "apply", label = "Apply", icon = icon("play"))
+
+actionButton(inputId = "reset", label = "Reset", icon = icon("sync"))
+
+
+observeEvent(eventExpr = input$reset, handlerExpr = {
+  
+  updateSliderInput(
+    inputId = "market_cap",
+    value   = 1
+  )
+  
+  updateSliderInput(
+    inputId = "max_sd",
+    value   = 1
+  )
+    
+  shinyjs::delay(ms = 300, expr = {
+      shinyjs::click(id = "apply")
+  })
+ 
+  
+})
+
+
+```
+
+<hr>
+
+
+
+> Based on the 1st Shiny App Project in Shiny Predictive Dashboards Course in the [5-Course R-Track Program](https://university.business-science.io/p/5-course-bundle-machine-learning-web-apps-time-series/?coupon_code=LEARNINGLABS)
+
+Learn more at [Business Science](https://www.business-science.io/)
+
+
+```{r}
+# LOGIC
+
+rv <- reactiveValues()
+
+observeEvent(input$apply, {
+  
+    req(input$market_cap)
+    req(input$max_sd)
+    
+    rv$nasdaq_metrics_screened_tbl <- nasdaq_metrics_tbl %>%
+    
+      inner_join(
+          nasdaq_index_tbl %>% select(symbol, company, market_cap), 
+          by = "symbol"
+      ) %>%
+      
+      filter(market_cap > input$market_cap * 1e9) %>%
+      
+      arrange(-sd) %>%
+      filter(
+          sd < input$max_sd, 
+          count > 365 * 5,
+          last_date == max(last_date)
+      ) %>%
+      mutate(reward_metric = 2500*mean/sd) %>%
+      mutate(desc = str_glue("
+                             Symbol: {symbol}
+                             Mean: {round(mean, 3)}
+                             SD: {round(sd, 3)}
+                             N: {count}
+                             RWD: {round(reward_metric, 1)}"))
+    
+    
+    n <- 9
+
+    rv$best_symbols_tbl <- rv$nasdaq_metrics_screened_tbl %>%
+        arrange(-reward_metric) %>%
+        slice(1:n) 
+    
+    rv$best_symbols <- rv$best_symbols_tbl$symbol
+    
+    rv$stock_screen_data <- nasdaq_data_tbl %>%
+        filter(symbol %in% rv$best_symbols) 
+        
+    
+}, ignoreNULL = FALSE)
+```
+
+
+## Column 
+
+<br>
+
+### NASDAQ Stock Metrics
+
+```{r}
+output$plotly_1 <- renderPlotly({
+
+    g <- rv$nasdaq_metrics_screened_tbl %>%
+      ggplot(aes(log(sd), log(mean))) +
+      geom_point(aes(text = desc, color = reward_metric), 
+                 alpha = 0.5, shape = 21, size = 4) +
+      geom_point(aes(text = desc), color = "#00ffcd",
+                 alpha = 0.5, shape = 21, size = 4, 
+                 data = rv$best_symbols_tbl) +
+      geom_smooth() +
+      scale_color_distiller(type = "div") +
+      theme_minimal() +
+      theme(
+          panel.background = element_rect(fill = "black"),
+          plot.background = element_rect(fill = "black"),
+          text = element_text(colour = "white")
+      ) 
+  
+  ggplotly(g)
+})
+
+plotlyOutput(outputId = "plotly_1")
+```
+
+
+## Column
+
+<br>
+
+### Best Stocks
+
+```{r}
+output$plotly_2 <- renderPlotly({
+
+    facet_col <- 1
+
+    if (length(input$products) > 3) facet_col <- 2
+
+    if (length(input$products) > 8) facet_col <- 3
+
+    g <- rv$stock_screen_data %>%
+        left_join(
+            rv$best_symbols_tbl %>% select(symbol, company)
+        ) %>%
+        group_by(symbol, company) %>%
+        plot_time_series(date, adjusted, .smooth = TRUE, .facet_ncol = 3, .interactive = F) +
+        geom_line(color = "white") +
+        theme_minimal() +
+        theme(
+            panel.background = element_rect(fill = "black"),
+            plot.background = element_rect(fill = "black"),
+            text = element_text(colour = "white"),
+            strip.text = element_text(colour = "white")
+        ) +
+        labs(title = "NASDAQ Financial Analysis")
+    
+    ggplotly(g)
+})
+
+plotlyOutput(outputId = "plotly_2")
+
+```
+
